@@ -296,9 +296,7 @@ The Python NN training produces weights and biases that are hardcoded as C array
 
 The complete research is documented chapter by chapter at:
 
-- [Chapter I — Introduction](https://fahmi-wiradika.github.io/projects/academic/bachelor-research/chapter-I/)
-- [Chapter II — Supporting Theories](https://fahmi-wiradika.github.io/projects/academic/bachelor-research/chapter-II/)
-- [Chapter III — Hardware Planning and Construction](https://fahmi-wiradika.github.io/projects/academic/bachelor-research/chapter-III/)
+- [Fahmi's Bachelor Research](https://fahmi-wiradika.github.io/projects/academic/research-project/bachelor-research)
 
 ---
 
