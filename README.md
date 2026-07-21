@@ -21,6 +21,20 @@ This repository contains the Python migration of the NN training pipeline: the p
 
 ---
 
+## Current Project Stage
+
+The project has moved beyond the initial MATLAB-to-Python migration. At the current stage, the repository contains three complementary modeling approaches that are being compared and developed:
+
+- `nilm_ml.py`: the baseline regression-style neural network. It follows the original MATLAB-inspired idea of predicting one class label from 1 to 8 using a 6→8→1 architecture.
+- `nilm_ml_binary.py`: the current improved model formulation. Instead of predicting a single class number, it predicts three independent binary outputs for AC, TV, and Lamp. This makes the task more natural because each appliance state is modeled directly and the final combination can be reconstructed from those flags.
+- `nilm_decomp_ml.py`: an experimental decomposition-based approach using NNLS and a small dictionary of reference signatures. This script is still in the development stage and is mainly a research topic, because the physical behavior of switching components such as the TV and Lamp is not strictly linear. Their combined harmonic signature cannot always be modeled as a simple sum of the individual signatures.
+
+### Why `nilm_ml_binary.py` is an improvement over `nilm_ml.py`
+
+Compared with `nilm_ml.py`, the binary model is a more suitable formulation for this problem. The original script treats load identification as a single multiclass regression problem, while the binary version decomposes the problem into three appliance-level decisions. This provides a more interpretable output structure, better matches the physical idea of identifying which loads are active, and avoids forcing all possible combinations into one discrete class index. In short, it is a more flexible and physically meaningful approach for multi-load identification.
+
+---
+
 ## How the System Works
 
 ```
@@ -185,9 +199,11 @@ These are embedded as C arrays in the STM32 firmware for real-time inference.
 
 ```
 NILM-ML-Project/
-├── nilm_ml.py          # Original monolithic migration (reference)
-├── requirements.txt    # Dependencies
-├── data.csv            # Training data (gitignored — add your own)
+├── nilm_ml.py             # Baseline regression-style classifier (class 1–8)
+├── nilm_ml_binary.py      # Improved multi-label binary classifier for AC/TV/Lamp
+├── nilm_decomp_ml.py      # Experimental NNLS decomposition approach
+├── requirements.txt       # Dependencies
+├── data.csv               # Training data (gitignored — add your own)
 └── README.md
 ```
 
@@ -215,37 +231,165 @@ pip install -r requirements.txt
 
 ## Usage
 
-Place your `data.csv` in the project root (it is gitignored to protect research data), then run:
+Place your `data.csv` in the project root (it is gitignored to protect research data), then run one of the available scripts:
 
 ```bash
 python nilm_ml.py
+python nilm_ml_binary.py
+python nilm_decomp_ml.py
 ```
 
-This will:
-1. Load and normalize the dataset
-2. Train the 6→8→1 network for 1000 epochs
-3. Print Layer 1 and Layer 2 weights and biases
-4. Run predictions on 8 random samples and print actual vs. predicted class
+These scripts cover the current development stage of the project:
+1. `nilm_ml.py` trains the baseline 6→8→1 network and prints class-based predictions.
+2. `nilm_ml_binary.py` trains the improved multi-label model and predicts AC/TV/Lamp activity as binary flags.
+3. `nilm_decomp_ml.py` explores decomposition-based identification and is still under research due to the non-linear behavior of switching loads.
 
 ### Expected Output
 
-```
-Epoch  100 | Loss: 0.024312
-Epoch  200 | Loss: 0.008741
-...
-Epoch 1000 | Loss: 0.000183
+#### 1) Baseline model: `nilm_ml.py`
+
+```text
+(.venv) PS C:\Fahmi\Onboarding\nilm-ml-python> python .\nilm_ml.py
+Epoch  100 | Loss: 0.023218
+Epoch  200 | Loss: 0.010416
+Epoch  300 | Loss: 0.008320
+Epoch  400 | Loss: 0.006986
+Epoch  500 | Loss: 0.006124
+Epoch  600 | Loss: 0.005545
+Epoch  700 | Loss: 0.005113
+Epoch  800 | Loss: 0.004749
+Epoch  900 | Loss: 0.004410
+Epoch 1000 | Loss: 0.004083
 
 Training complete.
 
 === Layer 1 Weights (8x6) ===
-[[ 14.2109  31.9712 -67.1798 ...]
- ...
+[[-2.3081 -2.167   0.6977  2.0946 -0.0558 -0.262 ]
+ ...]
 
 === Sample Predictions ===
-  Actual: 3  |  Predicted: 3
+  Actual: 4  |  Predicted: 4
   Actual: 7  |  Predicted: 7
-  ...
+  Actual: 1  |  Predicted: 1
+  Actual: 6  |  Predicted: 6
+  Actual: 6  |  Predicted: 6
+  Actual: 6  |  Predicted: 6
+  Actual: 8  |  Predicted: 8
+  Actual: 3  |  Predicted: 3
 ```
+
+This script outputs a single predicted class in the range 1–8.
+
+#### 2) Improved binary model: `nilm_ml_binary.py`
+
+```text
+(.venv) PS C:\Fahmi\Onboarding\nilm-ml-python> python .\nilm_ml_binary.py
+Epoch  100 | Loss: 0.392771
+Epoch  200 | Loss: 0.202685
+Epoch  300 | Loss: 0.132555
+Epoch  400 | Loss: 0.099895
+Epoch  500 | Loss: 0.080258
+Epoch  600 | Loss: 0.067072
+Epoch  700 | Loss: 0.057438
+Epoch  800 | Loss: 0.049943
+Epoch  900 | Loss: 0.043689
+Epoch 1000 | Loss: 0.038281
+
+Training complete.
+
+=== Sample Predictions ===
+Actual Class  Actual [AC,TV,Lamp]   Predicted [AC,TV,Lamp]  Predicted Label     Match
+4             [0, 0, 1]             [0, 0, 1]               Lamp                ✔
+6             [0, 1, 1]             [0, 1, 1]               TV+Lamp             ✔
+8             [1, 1, 1]             [1, 1, 1]               AC+TV+Lamp          ✔
+6             [0, 1, 1]             [0, 1, 1]               TV+Lamp             ✔
+5             [1, 1, 0]             [1, 1, 0]               AC+TV               ✔
+7             [1, 0, 1]             [1, 0, 1]               AC+Lamp             ✔
+7             [1, 0, 1]             [1, 0, 1]               AC+Lamp             ✔
+5             [1, 1, 0]             [1, 1, 0]               AC+TV               ✔
+```
+
+This script outputs three independent binary flags for AC, TV, and Lamp.
+
+#### 3) Experimental decomposition model: `nilm_decomp_ml.py`
+
+```text
+(.venv) PS C:\Fahmi\Onboarding\nilm-ml-python> python .\nilm_decomp_ml.py
+============================================================
+NNLS LOAD DECOMPOSITION — CHECKPOINT
+============================================================
+
+Trained using only 4 reference signatures (classes 2, 3, 4, 6)
+instead of all 8 combination classes. Evaluated against all 8
+to measure how well unseen combinations (1, 5, 7, 8) are inferred.
+
+[NNLSLoadDecomposer] Reference Dictionary (4 atoms)
+  Atom                             rms      h1      h3      h5      h7      h9
+  ----------------------------------------------------------------------------
+  AC                            0.1733  0.1675  0.0000  0.0000  0.0000  0.0000
+  TV                            0.2070  0.1079  0.0928  0.0719  0.0475  0.0216
+  Lamp                          0.2674  0.1710  0.1194  0.0643  0.0497  0.0436
+  TV+Lamp (interaction atom)    0.3791  0.2820  0.1854  0.0603  0.0048  0.0193
+
+============================================================
+OVERALL EVALUATION
+============================================================
+
+  Load    Correct  Total  Accuracy
+  --------------------------------
+  AC          808    808    100.0%
+  TV          761    808     94.2%
+  Lamp        759    808     93.9%
+
+  Exact match (all 3 correct) :  759/808 = 93.9%
+  Hamming score (label avg)   : 96.0%
+
+============================================================
+PER-CLASS BREAKDOWN
+============================================================
+
+  Class  Description      Correct  Total   Rate
+  --------------------------------------------------
+      1  No Load              101    101   100%
+      2  AC                   101    101   100%  (train)
+      3  TV                   100    101    99%  (train)
+      4  Lamp                  95    101    94%  (train)
+      5  AC + TV               60    101    59%
+      6  TV + Lamp            101    101   100%  (train)
+      7  AC + Lamp            100    101    99%
+      8  AC + TV + Lamp       101    101   100%
+
+============================================================
+SAMPLE PREDICTIONS (16 random rows)
+============================================================
+
+    #  Class  Description        Actual    Predicted    Label         Match
+  ------------------------------------------------------------------------------
+    1      4  Lamp             [0, 0, 1]   [0, 0, 1]    Lamp          ✔
+    2      1  No Load          [0, 0, 0]   [0, 0, 0]    No load       ✔
+    3      1  No Load          [0, 0, 0]   [0, 0, 0]    No load       ✔
+    4      6  TV + Lamp        [0, 1, 1]   [0, 1, 1]    TV+Lamp       ✔
+    5      6  TV + Lamp        [0, 1, 1]   [0, 1, 1]    TV+Lamp       ✔
+    6      6  TV + Lamp        [0, 1, 1]   [0, 1, 1]    TV+Lamp       ✔
+    7      5  AC + TV          [1, 1, 0]   [1, 1, 0]    AC+TV         ✔
+    8      7  AC + Lamp        [1, 0, 1]   [1, 0, 1]    AC+Lamp       ✔
+    9      7  AC + Lamp        [1, 0, 1]   [1, 0, 1]    AC+Lamp       ✔
+   10      6  TV + Lamp        [0, 1, 1]   [0, 1, 1]    TV+Lamp       ✔
+   11      4  Lamp             [0, 0, 1]   [0, 0, 1]    Lamp          ✔
+   12      1  No Load          [0, 0, 0]   [0, 0, 0]    No load       ✔
+   13      7  AC + Lamp        [1, 0, 1]   [1, 0, 1]    AC+Lamp       ✔
+   14      8  AC + TV + Lamp   [1, 1, 1]   [1, 1, 1]    AC+TV+Lamp    ✔
+   15      7  AC + Lamp        [1, 0, 1]   [1, 0, 1]    AC+Lamp       ✔
+   16      2  AC               [1, 0, 0]   [1, 0, 0]    AC            ✔
+
+Note: AC+TV (class 5) is the weakest class under this method (see
+checkpoint summary above) because TV and Lamp remain individually
+hard to distinguish whenever they are not measured together. This
+is a documented, physically-explained limitation, not a bug.
+
+```
+
+This script shows the NNLS-based decomposition logic and is still considered a research-stage approach, especially for cases where TV and Lamp interact non-linearly.
 
 ---
 
@@ -297,6 +441,7 @@ The Python NN training produces weights and biases that are hardcoded as C array
 The complete research is documented chapter by chapter at:
 
 - [Fahmi's Bachelor Research](https://fahmi-wiradika.github.io/projects/academic/research-project/bachelor-research)
+- [GitHub Repository](https://github.com/fahmi-wiradika/nilm-ml-python)
 
 ---
 
